@@ -87,6 +87,7 @@ class GodotServer {
     'new_path': 'newPath',
     'new_name': 'newName',
     'new_parent_path': 'newParentPath',
+    'instance_path': 'instancePath',
     'file_path': 'filePath',
     'directory': 'directory',
     'recursive': 'recursive',
@@ -980,6 +981,30 @@ class GodotServer {
           },
         },
         {
+          name: 'add_scene_instance',
+          description: 'Add an instance of another scene as a child node (like dragging a scene into the editor)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              projectPath: { type: 'string', description: 'Path to the Godot project directory' },
+              scenePath: { type: 'string', description: 'Path to the scene to modify (relative to project)' },
+              instancePath: {
+                type: 'string',
+                description: 'Path to the scene to instance (.tscn, relative to project)',
+              },
+              parentNodePath: {
+                type: 'string',
+                description: 'Path to the parent node (default: scene root)',
+              },
+              nodeName: {
+                type: 'string',
+                description: 'Optional name for the instance node (defaults to the instanced scene root name)',
+              },
+            },
+            required: ['projectPath', 'scenePath', 'instancePath'],
+          },
+        },
+        {
           name: 'get_uid',
           description: 'Get the UID for a specific file in a Godot project (for Godot 4.4+)',
           inputSchema: {
@@ -1052,6 +1077,8 @@ class GodotServer {
           return await this.handleRenameNode(request.params.arguments);
         case 'reparent_node':
           return await this.handleReparentNode(request.params.arguments);
+        case 'add_scene_instance':
+          return await this.handleAddSceneInstance(request.params.arguments);
         case 'get_uid':
           return await this.handleGetUid(request.params.arguments);
         case 'update_project_uids':
@@ -2263,6 +2290,42 @@ class GodotServer {
       args.projectPath,
       `Node '${args.nodePath}' moved under '${args.newParentPath}'.`,
       'reparent node'
+    );
+  }
+
+  /**
+   * Handle the add_scene_instance tool
+   */
+  private async handleAddSceneInstance(args: any) {
+    args = this.normalizeParameters(args);
+    const invalid = this.validateSceneOperation(args);
+    if (invalid) return invalid;
+    if (!args.instancePath) {
+      return this.createErrorResponse('Missing required parameters', ['Provide instancePath']);
+    }
+    if (!this.validatePath(args.instancePath)) {
+      return this.createErrorResponse('Invalid instance path', [
+        'Provide a valid path without ".." or other potentially unsafe characters',
+      ]);
+    }
+    if (!existsSync(join(args.projectPath, args.instancePath))) {
+      return this.createErrorResponse(`Scene to instance does not exist: ${args.instancePath}`, [
+        'Ensure the instance path is correct',
+        'Use create_scene to create the scene first',
+      ]);
+    }
+    const params: OperationParams = {
+      scenePath: args.scenePath,
+      instancePath: args.instancePath,
+    };
+    if (args.parentNodePath) params.parentNodePath = args.parentNodePath;
+    if (args.nodeName) params.nodeName = args.nodeName;
+    return this.runSceneOperation(
+      'add_scene_instance',
+      params,
+      args.projectPath,
+      `Instance of '${args.instancePath}' added.`,
+      'add scene instance'
     );
   }
 

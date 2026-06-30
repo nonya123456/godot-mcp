@@ -77,6 +77,8 @@ func _init():
             rename_node(params)
         "reparent_node":
             reparent_node(params)
+        "add_scene_instance":
+            add_scene_instance(params)
         "get_uid":
             get_uid(params)
         "resave_resources":
@@ -1459,3 +1461,36 @@ func _set_owner_recursive(node, scene_root):
     node.owner = scene_root
     for child in node.get_children():
         _set_owner_recursive(child, scene_root)
+
+# Add an instance of another scene (.tscn) as a child node. The instance's
+# internal nodes keep their own ownership, so the scene serializes the child
+# as instance=ExtResource(...) exactly like dragging a scene into the editor.
+func add_scene_instance(params):
+    var scene_root = load_scene_instance(params.scene_path)
+    if not scene_root:
+        quit(1)
+    var parent_path = params.parent_node_path if params.has("parent_node_path") else "root"
+    var parent = resolve_node(scene_root, parent_path)
+    if not parent:
+        printerr("Parent node not found: " + str(parent_path))
+        quit(1)
+    var instance_path = to_res_path(params.instance_path)
+    if not FileAccess.file_exists(instance_path):
+        printerr("Failed to find scene to instance: " + instance_path)
+        quit(1)
+    var sub_scene = load(instance_path)
+    if not (sub_scene is PackedScene):
+        printerr("Failed to load PackedScene: " + instance_path)
+        quit(1)
+    var instance = sub_scene.instantiate()
+    if params.has("node_name") and str(params.node_name) != "":
+        instance.name = params.node_name
+    parent.add_child(instance)
+    # Only the instance root is owned by our scene; its internal children keep
+    # the ownership from instantiate() so they are not re-serialized inline.
+    instance.owner = scene_root
+    var err = pack_and_save(scene_root, params.scene_path)
+    if err == OK:
+        print("Scene instance '" + str(instance.name) + "' added from: " + instance_path)
+    else:
+        printerr("Failed to save scene: " + str(err))
