@@ -88,6 +88,96 @@ func log_info(message):
 func log_error(message):
     printerr("[ERROR] " + message)
 
+# --- Shared helpers -------------------------------------------------------
+
+# Resolve a node inside an instantiated scene from an agent-supplied path.
+# Accepts the magic alias "root", the scene root's actual name, an absolute
+# style "root/Child/Grandchild" path, or a path relative to the root. Returns
+# null if the node cannot be found.
+func resolve_node(scene_root, node_path):
+    if node_path == null:
+        return scene_root
+    var p = str(node_path).strip_edges()
+    if p == "" or p == "." or p == "root":
+        return scene_root
+    # Strip an explicit "root/" prefix (the documented convention).
+    if p.begins_with("root/"):
+        p = p.substr("root/".length())
+    elif p == scene_root.name:
+        return scene_root
+    elif p.begins_with(str(scene_root.name) + "/"):
+        p = p.substr(str(scene_root.name).length() + 1)
+    if p == "":
+        return scene_root
+    return scene_root.get_node_or_null(p)
+
+# Convert an agent-supplied JSON value into the concrete type expected by a
+# node property. JSON can only carry primitives/arrays/objects, so struct
+# types such as Vector2/Color have to be reconstructed before assignment.
+# Without this, set("position", [100, 200]) would silently fail.
+func coerce_value(node, property, value):
+    # res:// strings are loaded as resources (textures, scenes, etc.).
+    if typeof(value) == TYPE_STRING and value.begins_with("res://"):
+        return load(value)
+
+    # Find the property's declared type from the node's property list.
+    var expected_type = TYPE_NIL
+    for prop in node.get_property_list():
+        if prop.name == property:
+            expected_type = prop.type
+            break
+
+    return coerce_to_type(value, expected_type)
+
+# Build a typed value from a JSON-friendly value given a Godot TYPE_* code.
+# Arrays are interpreted positionally; dictionaries by component name.
+func coerce_to_type(value, expected_type):
+    var t = typeof(value)
+
+    # Already the right primitive, or no type info: pass through.
+    if expected_type == TYPE_NIL:
+        return value
+
+    var arr = null
+    if t == TYPE_ARRAY:
+        arr = value
+    elif t == TYPE_DICTIONARY:
+        arr = _dict_to_components(value)
+
+    match expected_type:
+        TYPE_VECTOR2:
+            if arr != null and arr.size() >= 2: return Vector2(arr[0], arr[1])
+        TYPE_VECTOR2I:
+            if arr != null and arr.size() >= 2: return Vector2i(int(arr[0]), int(arr[1]))
+        TYPE_VECTOR3:
+            if arr != null and arr.size() >= 3: return Vector3(arr[0], arr[1], arr[2])
+        TYPE_VECTOR3I:
+            if arr != null and arr.size() >= 3: return Vector3i(int(arr[0]), int(arr[1]), int(arr[2]))
+        TYPE_VECTOR4:
+            if arr != null and arr.size() >= 4: return Vector4(arr[0], arr[1], arr[2], arr[3])
+        TYPE_COLOR:
+            if t == TYPE_STRING: return Color(value)
+            if arr != null and arr.size() >= 3:
+                var a = arr[3] if arr.size() >= 4 else 1.0
+                return Color(arr[0], arr[1], arr[2], a)
+        TYPE_RECT2:
+            if arr != null and arr.size() >= 4: return Rect2(arr[0], arr[1], arr[2], arr[3])
+        _:
+            # ints, floats, bools, strings, arrays, dictionaries: assign as-is.
+            return value
+    # Coercion expected an array/dict but didn't get a usable one.
+    return value
+
+func _dict_to_components(d):
+    # Map common component names to an ordered array.
+    for keys in [["x", "y", "z", "w"], ["r", "g", "b", "a"]]:
+        if d.has(keys[0]):
+            var out = []
+            for k in keys:
+                if d.has(k): out.append(d[k])
+            return out
+    return null
+
 # Get a script by registered class name.
 # Only looks up names via the project's global class registry. Raw paths
 # (e.g. "res://evil.gd") are intentionally not accepted here to prevent
@@ -242,12 +332,16 @@ func create_scene(params):
         printerr("Check if the class is registered in ClassDB or available as a script")
         quit(1)
     
-    scene_root.name = "root"
+    # Match the editor: a new scene's root node is named after its type
+    # (e.g. "Node2D"), not the literal string "root". Node operations still
+    # accept "root" as an alias for the scene root via resolve_node().
+    scene_root.name = root_node_type
     if debug_mode:
         print("Root node created with name: " + scene_root.name)
-    
-    # Set the owner of the root node to itself (important for scene saving)
-    scene_root.owner = scene_root
+
+    # The scene root's owner must stay null. Setting it to itself triggers a
+    # Godot error ("Condition p_owner == this is true") and is not how the
+    # editor saves scenes.
     
     # Pack the scene
     var packed_scene = PackedScene.new()
@@ -482,21 +576,17 @@ func add_node(params):
     if debug_mode:
         print("Scene instantiated")
     
-    # Use traditional if-else statement for better compatibility
-    var parent_path = "root"  # Default value
-    if params.has("parent_node_path"):
-        parent_path = params.parent_node_path
+    # Resolve the parent node ("root" alias, root name, or relative path).
+    var parent_path = params.parent_node_path if params.has("parent_node_path") else "root"
     if debug_mode:
-        print("Parent path: " + parent_path)
-    
-    var parent = scene_root
-    if parent_path != "root":
-        parent = scene_root.get_node(parent_path.replace("root/", ""))
-        if not parent:
-            printerr("Parent node not found: " + parent_path)
-            quit(1)
+        print("Parent path: " + str(parent_path))
+
+    var parent = resolve_node(scene_root, parent_path)
+    if not parent:
+        printerr("Parent node not found: " + str(parent_path))
+        quit(1)
     if debug_mode:
-        print("Parent node found: " + parent.name)
+        print("Parent node found: " + str(parent.name))
     
     if debug_mode:
         print("Instantiating node of type: " + params.node_type)
@@ -517,11 +607,9 @@ func add_node(params):
         for property in properties:
             if debug_mode:
                 print("Setting property: " + property + " = " + str(properties[property]))
-            var value = properties[property]
-            if typeof(value) == TYPE_STRING and value.begins_with("res://"):
-                value = load(value)
-                if debug_mode:
-                    print("Loaded resource for property: " + property + " -> " + str(value))
+            var value = coerce_value(new_node, property, properties[property])
+            if debug_mode:
+                print("Coerced value for property: " + property + " -> " + str(value))
             new_node.set(property, value)
     
     parent.add_child(new_node)
@@ -786,32 +874,36 @@ func export_mesh_library(params):
             if debug_mode:
                 print("Adding mesh: " + child.name)
             
-            # Add the mesh to the library
+            # Add the mesh to the library, baking the MeshInstance3D's transform
+            # relative to the item node (matches the editor's MeshLibrary export).
             mesh_library.create_item(item_id)
             mesh_library.set_item_name(item_id, child.name)
             mesh_library.set_item_mesh(item_id, mesh_instance.mesh)
+            if mesh_instance != child:
+                mesh_library.set_item_mesh_transform(item_id, mesh_instance.transform)
             if debug_mode:
                 print("Added mesh to library with ID: " + str(item_id))
-            
-            # Add collision shape if available
-            var collision_added = false
+
+            # Collect every collision shape with its transform. set_item_shapes
+            # expects a flat array of alternating [Shape3D, Transform3D] pairs.
+            var shapes = []
             for collision_child in child.get_children():
                 if collision_child is CollisionShape3D and collision_child.shape:
-                    mesh_library.set_item_shapes(item_id, [collision_child.shape])
+                    shapes.append(collision_child.shape)
+                    shapes.append(collision_child.transform)
                     if debug_mode:
                         print("Added collision shape from: " + collision_child.name)
-                    collision_added = true
-                    break
-            
-            if debug_mode and not collision_added:
+            if shapes.size() > 0:
+                mesh_library.set_item_shapes(item_id, shapes)
+            elif debug_mode:
                 print("No collision shape found for mesh: " + child.name)
-            
-            # Add preview if available
-            if mesh_instance.mesh:
-                mesh_library.set_item_preview(item_id, mesh_instance.mesh)
-                if debug_mode:
-                    print("Added preview for mesh: " + child.name)
-            
+
+            # Note: the editor also stores a rendered preview thumbnail, which
+            # requires a render pass that is unavailable in this headless script.
+            # We intentionally leave the preview empty rather than store an
+            # invalid value (the previous code passed the Mesh where a Texture2D
+            # was expected).
+
             item_id += 1
         elif debug_mode:
             print("Node " + child.name + " has no valid mesh")
