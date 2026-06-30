@@ -85,6 +85,8 @@ class GodotServer {
     'output_path': 'outputPath',
     'mesh_item_names': 'meshItemNames',
     'new_path': 'newPath',
+    'new_name': 'newName',
+    'new_parent_path': 'newParentPath',
     'file_path': 'filePath',
     'directory': 'directory',
     'recursive': 'recursive',
@@ -910,6 +912,74 @@ class GodotServer {
           },
         },
         {
+          name: 'update_node_property',
+          description: 'Set a property on an existing node in a scene',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              projectPath: { type: 'string', description: 'Path to the Godot project directory' },
+              scenePath: { type: 'string', description: 'Path to the scene file (relative to project)' },
+              nodePath: {
+                type: 'string',
+                description: 'Path to the node (e.g. "root/Player" or "Player")',
+              },
+              property: { type: 'string', description: 'Name of the property to set' },
+              value: {
+                description:
+                  'Value to assign. Arrays/objects are coerced to Godot types by the property type (e.g. [100,200] -> Vector2); a "res://" string loads a resource.',
+              },
+            },
+            required: ['projectPath', 'scenePath', 'nodePath', 'property', 'value'],
+          },
+        },
+        {
+          name: 'delete_node',
+          description: 'Delete a node (and its children) from a scene',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              projectPath: { type: 'string', description: 'Path to the Godot project directory' },
+              scenePath: { type: 'string', description: 'Path to the scene file (relative to project)' },
+              nodePath: {
+                type: 'string',
+                description: 'Path to the node to delete (cannot be the scene root)',
+              },
+            },
+            required: ['projectPath', 'scenePath', 'nodePath'],
+          },
+        },
+        {
+          name: 'rename_node',
+          description: 'Rename an existing node in a scene',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              projectPath: { type: 'string', description: 'Path to the Godot project directory' },
+              scenePath: { type: 'string', description: 'Path to the scene file (relative to project)' },
+              nodePath: { type: 'string', description: 'Path to the node to rename' },
+              newName: { type: 'string', description: 'New name for the node' },
+            },
+            required: ['projectPath', 'scenePath', 'nodePath', 'newName'],
+          },
+        },
+        {
+          name: 'reparent_node',
+          description: 'Move a node under a different parent in a scene',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              projectPath: { type: 'string', description: 'Path to the Godot project directory' },
+              scenePath: { type: 'string', description: 'Path to the scene file (relative to project)' },
+              nodePath: { type: 'string', description: 'Path to the node to move (cannot be the scene root)' },
+              newParentPath: {
+                type: 'string',
+                description: 'Path to the new parent node (e.g. "root" or "root/Container")',
+              },
+            },
+            required: ['projectPath', 'scenePath', 'nodePath', 'newParentPath'],
+          },
+        },
+        {
           name: 'get_uid',
           description: 'Get the UID for a specific file in a Godot project (for Godot 4.4+)',
           inputSchema: {
@@ -974,6 +1044,14 @@ class GodotServer {
           return await this.handleSaveScene(request.params.arguments);
         case 'get_scene_tree':
           return await this.handleGetSceneTree(request.params.arguments);
+        case 'update_node_property':
+          return await this.handleUpdateNodeProperty(request.params.arguments);
+        case 'delete_node':
+          return await this.handleDeleteNode(request.params.arguments);
+        case 'rename_node':
+          return await this.handleRenameNode(request.params.arguments);
+        case 'reparent_node':
+          return await this.handleReparentNode(request.params.arguments);
         case 'get_uid':
           return await this.handleGetUid(request.params.arguments);
         case 'update_project_uids':
@@ -2050,6 +2128,142 @@ class GodotServer {
         ]
       );
     }
+  }
+
+  /**
+   * Validate that a project + scene exist and their paths are safe.
+   * Returns an error response object if validation fails, otherwise null.
+   */
+  private validateSceneOperation(args: any): any | null {
+    if (!args.projectPath || !args.scenePath) {
+      return this.createErrorResponse('Missing required parameters', ['Provide projectPath and scenePath']);
+    }
+    if (!this.validatePath(args.projectPath) || !this.validatePath(args.scenePath)) {
+      return this.createErrorResponse('Invalid path', [
+        'Provide valid paths without ".." or other potentially unsafe characters',
+      ]);
+    }
+    if (!existsSync(join(args.projectPath, 'project.godot'))) {
+      return this.createErrorResponse(`Not a valid Godot project: ${args.projectPath}`, [
+        'Ensure the path points to a directory containing a project.godot file',
+        'Use list_projects to find valid Godot projects',
+      ]);
+    }
+    if (!existsSync(join(args.projectPath, args.scenePath))) {
+      return this.createErrorResponse(`Scene file does not exist: ${args.scenePath}`, [
+        'Ensure the scene path is correct',
+        'Use create_scene to create a new scene first',
+      ]);
+    }
+    return null;
+  }
+
+  /**
+   * Run a scene-mutating operation and turn its output into a tool response.
+   */
+  private async runSceneOperation(
+    operation: string,
+    params: OperationParams,
+    projectPath: string,
+    successText: string,
+    failVerb: string
+  ): Promise<any> {
+    try {
+      const { stdout, stderr } = await this.executeOperation(operation, params, projectPath);
+      if (stderr && (stderr.includes('Failed to') || stderr.includes('[ERROR]'))) {
+        return this.createErrorResponse(`Failed to ${failVerb}: ${stderr}`, [
+          'Verify the node path and parameters are correct',
+          'Use get_scene_tree to inspect the scene',
+        ]);
+      }
+      return { content: [{ type: 'text', text: `${successText}\n\nOutput: ${stdout}` }] };
+    } catch (error: any) {
+      return this.createErrorResponse(`Failed to ${failVerb}: ${error?.message || 'Unknown error'}`, [
+        'Ensure Godot is installed correctly',
+        'Check if the GODOT_PATH environment variable is set correctly',
+        'Verify the project path is accessible',
+      ]);
+    }
+  }
+
+  /**
+   * Handle the update_node_property tool
+   */
+  private async handleUpdateNodeProperty(args: any) {
+    args = this.normalizeParameters(args);
+    const invalid = this.validateSceneOperation(args);
+    if (invalid) return invalid;
+    if (!args.nodePath || !args.property || args.value === undefined) {
+      return this.createErrorResponse('Missing required parameters', [
+        'Provide nodePath, property, and value',
+      ]);
+    }
+    return this.runSceneOperation(
+      'update_node_property',
+      { scenePath: args.scenePath, nodePath: args.nodePath, property: args.property, value: args.value },
+      args.projectPath,
+      `Property '${args.property}' updated on '${args.nodePath}'.`,
+      'update node property'
+    );
+  }
+
+  /**
+   * Handle the delete_node tool
+   */
+  private async handleDeleteNode(args: any) {
+    args = this.normalizeParameters(args);
+    const invalid = this.validateSceneOperation(args);
+    if (invalid) return invalid;
+    if (!args.nodePath) {
+      return this.createErrorResponse('Missing required parameters', ['Provide nodePath']);
+    }
+    return this.runSceneOperation(
+      'delete_node',
+      { scenePath: args.scenePath, nodePath: args.nodePath },
+      args.projectPath,
+      `Node '${args.nodePath}' deleted.`,
+      'delete node'
+    );
+  }
+
+  /**
+   * Handle the rename_node tool
+   */
+  private async handleRenameNode(args: any) {
+    args = this.normalizeParameters(args);
+    const invalid = this.validateSceneOperation(args);
+    if (invalid) return invalid;
+    if (!args.nodePath || !args.newName) {
+      return this.createErrorResponse('Missing required parameters', ['Provide nodePath and newName']);
+    }
+    return this.runSceneOperation(
+      'rename_node',
+      { scenePath: args.scenePath, nodePath: args.nodePath, newName: args.newName },
+      args.projectPath,
+      `Node '${args.nodePath}' renamed to '${args.newName}'.`,
+      'rename node'
+    );
+  }
+
+  /**
+   * Handle the reparent_node tool
+   */
+  private async handleReparentNode(args: any) {
+    args = this.normalizeParameters(args);
+    const invalid = this.validateSceneOperation(args);
+    if (invalid) return invalid;
+    if (!args.nodePath || !args.newParentPath) {
+      return this.createErrorResponse('Missing required parameters', [
+        'Provide nodePath and newParentPath',
+      ]);
+    }
+    return this.runSceneOperation(
+      'reparent_node',
+      { scenePath: args.scenePath, nodePath: args.nodePath, newParentPath: args.newParentPath },
+      args.projectPath,
+      `Node '${args.nodePath}' moved under '${args.newParentPath}'.`,
+      'reparent node'
+    );
   }
 
   /**

@@ -69,6 +69,14 @@ func _init():
             save_scene(params)
         "get_scene_tree":
             get_scene_tree(params)
+        "update_node_property":
+            update_node_property(params)
+        "delete_node":
+            delete_node(params)
+        "rename_node":
+            rename_node(params)
+        "reparent_node":
+            reparent_node(params)
         "get_uid":
             get_uid(params)
         "resave_resources":
@@ -1358,3 +1366,96 @@ func _describe_node(node, scene_root, node_path):
     if children.size() > 0:
         info["children"] = children
     return info
+
+# Set a property on a node that already exists in the scene.
+func update_node_property(params):
+    var scene_root = load_scene_instance(params.scene_path)
+    if not scene_root:
+        quit(1)
+    var node = resolve_node(scene_root, params.node_path)
+    if not node:
+        printerr("Failed to find node: " + str(params.node_path))
+        quit(1)
+    var value = coerce_value(node, params.property, params.value)
+    node.set(params.property, value)
+    var err = pack_and_save(scene_root, params.scene_path)
+    if err == OK:
+        print("Property '" + str(params.property) + "' updated on node: " + str(params.node_path))
+    else:
+        printerr("Failed to save scene: " + str(err))
+
+# Remove a node (and its descendants) from the scene.
+func delete_node(params):
+    var scene_root = load_scene_instance(params.scene_path)
+    if not scene_root:
+        quit(1)
+    var node = resolve_node(scene_root, params.node_path)
+    if not node:
+        printerr("Failed to find node: " + str(params.node_path))
+        quit(1)
+    if node == scene_root:
+        printerr("Failed to delete node: cannot delete the scene root")
+        quit(1)
+    node.get_parent().remove_child(node)
+    node.free()
+    var err = pack_and_save(scene_root, params.scene_path)
+    if err == OK:
+        print("Node deleted: " + str(params.node_path))
+    else:
+        printerr("Failed to save scene: " + str(err))
+
+# Rename an existing node.
+func rename_node(params):
+    var scene_root = load_scene_instance(params.scene_path)
+    if not scene_root:
+        quit(1)
+    var node = resolve_node(scene_root, params.node_path)
+    if not node:
+        printerr("Failed to find node: " + str(params.node_path))
+        quit(1)
+    node.name = params.new_name
+    var err = pack_and_save(scene_root, params.scene_path)
+    if err == OK:
+        print("Node renamed to: " + str(node.name))
+    else:
+        printerr("Failed to save scene: " + str(err))
+
+# Move a node under a new parent, preserving ownership so it stays part of
+# the scene (mirrors the editor's reparent / drag-in-tree behavior).
+func reparent_node(params):
+    var scene_root = load_scene_instance(params.scene_path)
+    if not scene_root:
+        quit(1)
+    var node = resolve_node(scene_root, params.node_path)
+    if not node:
+        printerr("Failed to find node: " + str(params.node_path))
+        quit(1)
+    if node == scene_root:
+        printerr("Failed to reparent node: cannot reparent the scene root")
+        quit(1)
+    var new_parent = resolve_node(scene_root, params.new_parent_path)
+    if not new_parent:
+        printerr("Failed to find new parent node: " + str(params.new_parent_path))
+        quit(1)
+    # Guard against creating a cycle (new parent is the node or inside its subtree).
+    if new_parent == node or node.is_ancestor_of(new_parent):
+        printerr("Failed to reparent node: new parent is inside the node's own subtree")
+        quit(1)
+    node.get_parent().remove_child(node)
+    # Clear ownership across the moved subtree before re-attaching, then restore
+    # it, so Godot doesn't warn about an inconsistent owner during add_child.
+    _set_owner_recursive(node, null)
+    new_parent.add_child(node)
+    _set_owner_recursive(node, scene_root)
+    var err = pack_and_save(scene_root, params.scene_path)
+    if err == OK:
+        print("Node '" + str(node.name) + "' reparented under: " + str(params.new_parent_path))
+    else:
+        printerr("Failed to save scene: " + str(err))
+
+# Recursively set the owner of a node and its descendants to the scene root,
+# so they are serialized as part of the scene after a structural change.
+func _set_owner_recursive(node, scene_root):
+    node.owner = scene_root
+    for child in node.get_children():
+        _set_owner_recursive(child, scene_root)
