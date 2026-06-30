@@ -9,13 +9,13 @@
     "claude",
     "cline"
   ],
-  "homepage": "https://codeberg.org/desertmouse/godot-mcp",
+  "homepage": "https://github.com/nonya123456/godot-mcp#readme",
   "bugs": {
-    "url": "https://codeberg.org/desertmouse/godot-mcp/issues"
+    "url": "https://github.com/nonya123456/godot-mcp/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://codeberg.org/desertmouse/godot-mcp.git"
+    "url": "git+https://github.com/nonya123456/godot-mcp.git"
   },
   "license": "MIT",
   "author": "Solomon Elias <solomon@sippy.ai>",

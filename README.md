@@ -87,20 +87,12 @@ Godot MCP enables AI agents to launch the Godot editor, run projects, capture de
 
 ## Quick Start
 
-This server runs directly from TypeScript source with [Bun](https://bun.sh) — there is no build step. This fork is not published to npm, so clone it and install dependencies:
-
-```bash
-git clone https://codeberg.org/desertmouse/godot-mcp.git
-cd godot-mcp
-bun install
-```
-
-Then point your MCP client at `src/index.ts` with Bun. In the examples below, replace `/path/to/godot-mcp` with the directory you cloned into.
+This server runs directly from TypeScript with [Bun](https://bun.sh) — there is no build step. The simplest way to use it is with `bunx`, which fetches and runs it straight from GitHub. No clone, no install step, and the config below is portable across machines:
 
 ### Claude Code
 
 ```bash
-claude mcp add godot -- bun /path/to/godot-mcp/src/index.ts
+claude mcp add godot -- bunx github:nonya123456/godot-mcp
 ```
 
 That's it. Restart Claude Code and your Godot MCP tools are available.
@@ -108,8 +100,10 @@ That's it. Restart Claude Code and your Godot MCP tools are available.
 With environment variables:
 
 ```bash
-claude mcp add godot -e GODOT_PATH=/path/to/godot -e DEBUG=true -- bun /path/to/godot-mcp/src/index.ts
+claude mcp add godot -e GODOT_PATH=/path/to/godot -e DEBUG=true -- bunx github:nonya123456/godot-mcp
 ```
+
+> Requires [Bun](https://bun.sh). The first launch downloads the repo into Bun's cache; later launches reuse it. To pin a specific version, append a ref: `github:nonya123456/godot-mcp#<commit-or-tag>`.
 
 <details>
 <summary><strong>Cline</strong></summary>
@@ -120,8 +114,8 @@ Add to your Cline MCP settings file (`~/Library/Application Support/Code/User/gl
 {
   "mcpServers": {
     "godot": {
-      "command": "bun",
-      "args": ["/path/to/godot-mcp/src/index.ts"],
+      "command": "bunx",
+      "args": ["github:nonya123456/godot-mcp"],
       "env": {
         "DEBUG": "true"
       },
@@ -169,7 +163,7 @@ Add to your Cline MCP settings file (`~/Library/Application Support/Code/User/gl
 3. Fill out the form:
    - Name: `godot`
    - Type: `command`
-   - Command: `bun /path/to/godot-mcp/src/index.ts`
+   - Command: `bunx github:nonya123456/godot-mcp`
 4. Click "Add"
 5. You may need to press the refresh button in the top right corner of the MCP server card to populate the tool list
 
@@ -181,8 +175,8 @@ Create a file at `.cursor/mcp.json` in your project directory:
 {
   "mcpServers": {
     "godot": {
-      "command": "bun",
-      "args": ["/path/to/godot-mcp/src/index.ts"],
+      "command": "bunx",
+      "args": ["github:nonya123456/godot-mcp"],
       "env": {
         "DEBUG": "true"
       }
@@ -202,8 +196,8 @@ For any MCP-compatible client, use this configuration:
 {
   "mcpServers": {
     "godot": {
-      "command": "bun",
-      "args": ["/path/to/godot-mcp/src/index.ts"],
+      "command": "bunx",
+      "args": ["github:nonya123456/godot-mcp"],
       "env": {
         "GODOT_PATH": "/path/to/godot",
         "DEBUG": "true"
@@ -212,6 +206,27 @@ For any MCP-compatible client, use this configuration:
   }
 }
 ```
+
+</details>
+
+<details>
+<summary><strong>From source (development)</strong></summary>
+
+To hack on the server, run it from a local checkout instead of fetching from GitHub:
+
+```bash
+git clone https://github.com/nonya123456/godot-mcp.git
+cd godot-mcp
+bun install
+```
+
+Then point your MCP client at the local entry file (replace `/path/to/godot-mcp` with where you cloned it):
+
+```bash
+claude mcp add godot -- bun /path/to/godot-mcp/src/index.ts
+```
+
+Your local edits take effect the next time the server starts.
 
 </details>
 
