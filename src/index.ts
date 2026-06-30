@@ -88,6 +88,12 @@ class GodotServer {
     'new_name': 'newName',
     'new_parent_path': 'newParentPath',
     'instance_path': 'instancePath',
+    'script_path': 'scriptPath',
+    'from_node_path': 'fromNodePath',
+    'to_node_path': 'toNodePath',
+    'signal_name': 'signalName',
+    'method_name': 'methodName',
+    'group_name': 'groupName',
     'file_path': 'filePath',
     'directory': 'directory',
     'recursive': 'recursive',
@@ -1005,6 +1011,69 @@ class GodotServer {
           },
         },
         {
+          name: 'create_script',
+          description: 'Create a new GDScript file in the project',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              projectPath: { type: 'string', description: 'Path to the Godot project directory' },
+              scriptPath: {
+                type: 'string',
+                description: 'Path where the script will be saved (e.g. "scripts/player.gd")',
+              },
+              content: {
+                type: 'string',
+                description: 'GDScript source code (defaults to "extends Node")',
+              },
+            },
+            required: ['projectPath', 'scriptPath'],
+          },
+        },
+        {
+          name: 'attach_script',
+          description: 'Attach an existing script to a node in a scene',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              projectPath: { type: 'string', description: 'Path to the Godot project directory' },
+              scenePath: { type: 'string', description: 'Path to the scene file (relative to project)' },
+              nodePath: { type: 'string', description: 'Path to the node (e.g. "root" or "root/Player")' },
+              scriptPath: { type: 'string', description: 'Path to the .gd script (relative to project)' },
+            },
+            required: ['projectPath', 'scenePath', 'nodePath', 'scriptPath'],
+          },
+        },
+        {
+          name: 'connect_signal',
+          description: 'Connect a signal from one node to a method on another node',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              projectPath: { type: 'string', description: 'Path to the Godot project directory' },
+              scenePath: { type: 'string', description: 'Path to the scene file (relative to project)' },
+              fromNodePath: { type: 'string', description: 'Path to the node emitting the signal' },
+              signalName: { type: 'string', description: 'Name of the signal (e.g. "pressed")' },
+              toNodePath: { type: 'string', description: 'Path to the node receiving the call' },
+              methodName: { type: 'string', description: 'Name of the method to call' },
+            },
+            required: ['projectPath', 'scenePath', 'fromNodePath', 'signalName', 'toNodePath', 'methodName'],
+          },
+        },
+        {
+          name: 'add_to_group',
+          description: 'Add a node to a group (persisted in the scene)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              projectPath: { type: 'string', description: 'Path to the Godot project directory' },
+              scenePath: { type: 'string', description: 'Path to the scene file (relative to project)' },
+              nodePath: { type: 'string', description: 'Path to the node' },
+              groupName: { type: 'string', description: 'Name of the group' },
+            },
+            required: ['projectPath', 'scenePath', 'nodePath', 'groupName'],
+          },
+        },
+        {
           name: 'get_uid',
           description: 'Get the UID for a specific file in a Godot project (for Godot 4.4+)',
           inputSchema: {
@@ -1079,6 +1148,14 @@ class GodotServer {
           return await this.handleReparentNode(request.params.arguments);
         case 'add_scene_instance':
           return await this.handleAddSceneInstance(request.params.arguments);
+        case 'create_script':
+          return await this.handleCreateScript(request.params.arguments);
+        case 'attach_script':
+          return await this.handleAttachScript(request.params.arguments);
+        case 'connect_signal':
+          return await this.handleConnectSignal(request.params.arguments);
+        case 'add_to_group':
+          return await this.handleAddToGroup(request.params.arguments);
         case 'get_uid':
           return await this.handleGetUid(request.params.arguments);
         case 'update_project_uids':
@@ -2326,6 +2403,110 @@ class GodotServer {
       args.projectPath,
       `Instance of '${args.instancePath}' added.`,
       'add scene instance'
+    );
+  }
+
+  /**
+   * Handle the create_script tool
+   */
+  private async handleCreateScript(args: any) {
+    args = this.normalizeParameters(args);
+    if (!args.projectPath || !args.scriptPath) {
+      return this.createErrorResponse('Missing required parameters', ['Provide projectPath and scriptPath']);
+    }
+    if (!this.validatePath(args.projectPath) || !this.validatePath(args.scriptPath)) {
+      return this.createErrorResponse('Invalid path', [
+        'Provide valid paths without ".." or other potentially unsafe characters',
+      ]);
+    }
+    if (!existsSync(join(args.projectPath, 'project.godot'))) {
+      return this.createErrorResponse(`Not a valid Godot project: ${args.projectPath}`, [
+        'Ensure the path points to a directory containing a project.godot file',
+      ]);
+    }
+    const params: OperationParams = { scriptPath: args.scriptPath };
+    if (args.content !== undefined) params.content = args.content;
+    return this.runSceneOperation(
+      'create_script',
+      params,
+      args.projectPath,
+      `Script created at: ${args.scriptPath}`,
+      'create script'
+    );
+  }
+
+  /**
+   * Handle the attach_script tool
+   */
+  private async handleAttachScript(args: any) {
+    args = this.normalizeParameters(args);
+    const invalid = this.validateSceneOperation(args);
+    if (invalid) return invalid;
+    if (!args.nodePath || !args.scriptPath) {
+      return this.createErrorResponse('Missing required parameters', ['Provide nodePath and scriptPath']);
+    }
+    if (!this.validatePath(args.scriptPath)) {
+      return this.createErrorResponse('Invalid script path', [
+        'Provide a valid path without ".." or other potentially unsafe characters',
+      ]);
+    }
+    if (!existsSync(join(args.projectPath, args.scriptPath))) {
+      return this.createErrorResponse(`Script does not exist: ${args.scriptPath}`, [
+        'Use create_script to create the script first',
+      ]);
+    }
+    return this.runSceneOperation(
+      'attach_script',
+      { scenePath: args.scenePath, nodePath: args.nodePath, scriptPath: args.scriptPath },
+      args.projectPath,
+      `Script '${args.scriptPath}' attached to '${args.nodePath}'.`,
+      'attach script'
+    );
+  }
+
+  /**
+   * Handle the connect_signal tool
+   */
+  private async handleConnectSignal(args: any) {
+    args = this.normalizeParameters(args);
+    const invalid = this.validateSceneOperation(args);
+    if (invalid) return invalid;
+    if (!args.fromNodePath || !args.signalName || !args.toNodePath || !args.methodName) {
+      return this.createErrorResponse('Missing required parameters', [
+        'Provide fromNodePath, signalName, toNodePath, and methodName',
+      ]);
+    }
+    return this.runSceneOperation(
+      'connect_signal',
+      {
+        scenePath: args.scenePath,
+        fromNodePath: args.fromNodePath,
+        signalName: args.signalName,
+        toNodePath: args.toNodePath,
+        methodName: args.methodName,
+      },
+      args.projectPath,
+      `Connected '${args.signalName}' from '${args.fromNodePath}' to '${args.toNodePath}.${args.methodName}'.`,
+      'connect signal'
+    );
+  }
+
+  /**
+   * Handle the add_to_group tool
+   */
+  private async handleAddToGroup(args: any) {
+    args = this.normalizeParameters(args);
+    const invalid = this.validateSceneOperation(args);
+    if (invalid) return invalid;
+    if (!args.nodePath || !args.groupName) {
+      return this.createErrorResponse('Missing required parameters', ['Provide nodePath and groupName']);
+    }
+    return this.runSceneOperation(
+      'add_to_group',
+      { scenePath: args.scenePath, nodePath: args.nodePath, groupName: args.groupName },
+      args.projectPath,
+      `Node '${args.nodePath}' added to group '${args.groupName}'.`,
+      'add to group'
     );
   }
 

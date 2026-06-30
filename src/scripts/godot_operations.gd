@@ -79,6 +79,14 @@ func _init():
             reparent_node(params)
         "add_scene_instance":
             add_scene_instance(params)
+        "create_script":
+            create_script(params)
+        "attach_script":
+            attach_script(params)
+        "connect_signal":
+            connect_signal(params)
+        "add_to_group":
+            add_to_group(params)
         "get_uid":
             get_uid(params)
         "resave_resources":
@@ -1492,5 +1500,97 @@ func add_scene_instance(params):
     var err = pack_and_save(scene_root, params.scene_path)
     if err == OK:
         print("Scene instance '" + str(instance.name) + "' added from: " + instance_path)
+    else:
+        printerr("Failed to save scene: " + str(err))
+
+# Create a GDScript file with the given contents (defaults to a Node stub).
+func create_script(params):
+    var script_path = to_res_path(params.script_path)
+    var dir_path = script_path.get_base_dir()
+    if dir_path != "res://" and not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(dir_path)):
+        var mkerr = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir_path))
+        if mkerr != OK:
+            printerr("Failed to create directory: " + dir_path + " (error " + str(mkerr) + ")")
+            quit(1)
+    var content = params.content if params.has("content") else "extends Node\n"
+    var f = FileAccess.open(script_path, FileAccess.WRITE)
+    if not f:
+        printerr("Failed to create script file: " + str(FileAccess.get_open_error()))
+        quit(1)
+    f.store_string(content)
+    f.close()
+    # Load it to validate it parses and to generate its .uid sidecar (Godot 4.4+).
+    var scr = load(script_path)
+    if scr is Script:
+        ResourceSaver.save(scr, script_path)
+        print("Script created at: " + script_path)
+    else:
+        # The file was written but does not parse as a valid script.
+        print("Script written at: " + script_path + " (warning: it did not parse as a valid GDScript)")
+
+# Attach an existing script resource to a node in a scene.
+func attach_script(params):
+    var scene_root = load_scene_instance(params.scene_path)
+    if not scene_root:
+        quit(1)
+    var node = resolve_node(scene_root, params.node_path)
+    if not node:
+        printerr("Failed to find node: " + str(params.node_path))
+        quit(1)
+    var script_path = to_res_path(params.script_path)
+    if not FileAccess.file_exists(script_path):
+        printerr("Failed to find script: " + script_path)
+        quit(1)
+    var scr = load(script_path)
+    if not (scr is Script):
+        printerr("Failed to load script (not a valid Script): " + script_path)
+        quit(1)
+    node.set_script(scr)
+    var err = pack_and_save(scene_root, params.scene_path)
+    if err == OK:
+        print("Script '" + script_path + "' attached to node: " + str(params.node_path))
+    else:
+        printerr("Failed to save scene: " + str(err))
+
+# Connect a signal from one node to a method on another, as a persistent
+# connection so it is serialized in the scene (matches the editor's signal
+# connection dialog).
+func connect_signal(params):
+    var scene_root = load_scene_instance(params.scene_path)
+    if not scene_root:
+        quit(1)
+    var from_node = resolve_node(scene_root, params.from_node_path)
+    if not from_node:
+        printerr("Failed to find source node: " + str(params.from_node_path))
+        quit(1)
+    var to_node = resolve_node(scene_root, params.to_node_path)
+    if not to_node:
+        printerr("Failed to find target node: " + str(params.to_node_path))
+        quit(1)
+    if not from_node.has_signal(params.signal_name):
+        printerr("Failed to connect: node has no signal '" + str(params.signal_name) + "'")
+        quit(1)
+    var callable = Callable(to_node, params.method_name)
+    from_node.connect(params.signal_name, callable, CONNECT_PERSIST)
+    var err = pack_and_save(scene_root, params.scene_path)
+    if err == OK:
+        print("Connected '" + str(params.signal_name) + "' -> " + str(params.to_node_path) + "." + str(params.method_name))
+    else:
+        printerr("Failed to save scene: " + str(err))
+
+# Add a node to a persistent group so it is serialized in the scene.
+func add_to_group(params):
+    var scene_root = load_scene_instance(params.scene_path)
+    if not scene_root:
+        quit(1)
+    var node = resolve_node(scene_root, params.node_path)
+    if not node:
+        printerr("Failed to find node: " + str(params.node_path))
+        quit(1)
+    # persistent = true so the membership is stored in the .tscn.
+    node.add_to_group(params.group_name, true)
+    var err = pack_and_save(scene_root, params.scene_path)
+    if err == OK:
+        print("Node '" + str(params.node_path) + "' added to group: " + str(params.group_name))
     else:
         printerr("Failed to save scene: " + str(err))
