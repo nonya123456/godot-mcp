@@ -67,6 +67,8 @@ func _init():
             export_mesh_library(params)
         "save_scene":
             save_scene(params)
+        "get_scene_tree":
+            get_scene_tree(params)
         "get_uid":
             get_uid(params)
         "resave_resources":
@@ -89,6 +91,46 @@ func log_error(message):
     printerr("[ERROR] " + message)
 
 # --- Shared helpers -------------------------------------------------------
+
+# Normalize a resource path so it begins with res://
+func to_res_path(p):
+    if p == null:
+        return p
+    if not p.begins_with("res://"):
+        return "res://" + p
+    return p
+
+# Load a scene file and return a fresh instance of its tree, or null on error.
+func load_scene_instance(scene_path):
+    scene_path = to_res_path(scene_path)
+    if not FileAccess.file_exists(scene_path):
+        printerr("Scene file does not exist at: " + scene_path)
+        return null
+    var scene = load(scene_path)
+    if not scene:
+        printerr("Failed to load scene: " + scene_path)
+        return null
+    return scene.instantiate()
+
+# Pack an instantiated scene tree and write it to disk, creating the target
+# directory if needed. Returns OK on success or an error code.
+func pack_and_save(scene_root, save_path):
+    save_path = to_res_path(save_path)
+    var dir_path = save_path.get_base_dir()
+    if dir_path != "res://" and not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(dir_path)):
+        var mkerr = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir_path))
+        if mkerr != OK:
+            printerr("Failed to create directory: " + dir_path + " (error " + str(mkerr) + ")")
+            return mkerr
+    var packed_scene = PackedScene.new()
+    var pack_result = packed_scene.pack(scene_root)
+    if pack_result != OK:
+        printerr("Failed to pack scene: " + str(pack_result))
+        return pack_result
+    var save_error = ResourceSaver.save(packed_scene, save_path)
+    if save_error != OK:
+        printerr("Failed to save scene: " + str(save_error))
+    return save_error
 
 # Resolve a node inside an instantiated scene from an agent-supplied path.
 # Accepts the magic alias "root", the scene root's actual name, an absolute
@@ -1276,3 +1318,43 @@ func save_scene(params):
             printerr("Failed to save scene: " + str(error))
     else:
         printerr("Failed to pack scene: " + str(result))
+
+# Return the node hierarchy of a scene as JSON so an agent can inspect what
+# already exists (names, types, paths, attached scripts, sub-scene instances).
+func get_scene_tree(params):
+    var scene_root = load_scene_instance(params.scene_path)
+    if not scene_root:
+        quit(1)
+    var tree = _describe_node(scene_root, scene_root, ".")
+    print(JSON.stringify({"scene": to_res_path(params.scene_path), "root": tree}))
+
+func _describe_node(node, scene_root, node_path):
+    var info = {
+        "name": str(node.name),
+        "type": node.get_class(),
+        "path": node_path,
+    }
+    # Report an attached script by its resource path, if any.
+    var scr = node.get_script()
+    if scr and scr.resource_path != "":
+        info["script"] = scr.resource_path
+    # Report a sub-scene instance by its source scene path, if any.
+    if node != scene_root and node.scene_file_path != "":
+        info["instance"] = node.scene_file_path
+    # Report persistent groups the node belongs to.
+    var groups = []
+    for g in node.get_groups():
+        if not str(g).begins_with("_"):
+            groups.append(str(g))
+    if groups.size() > 0:
+        info["groups"] = groups
+    # Don't descend into the internal nodes of an instanced sub-scene.
+    if node != scene_root and node.scene_file_path != "":
+        return info
+    var children = []
+    for child in node.get_children():
+        var child_path = (node_path + "/" + str(child.name)) if node_path != "." else str(child.name)
+        children.append(_describe_node(child, scene_root, child_path))
+    if children.size() > 0:
+        info["children"] = children
+    return info
