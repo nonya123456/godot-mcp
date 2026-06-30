@@ -87,10 +87,21 @@ Godot MCP enables AI agents to launch the Godot editor, run projects, capture de
 
 ## Quick Start
 
+This fork is not published to npm, so first build it from source:
+
+```bash
+git clone https://codeberg.org/desertmouse/godot-mcp.git
+cd godot-mcp
+npm install
+npm run build
+```
+
+This produces `build/index.js`. Use its absolute path when configuring your MCP client below. In the examples, replace `/path/to/godot-mcp` with the directory you cloned into.
+
 ### Claude Code
 
 ```bash
-claude mcp add godot -- npx @coding-solo/godot-mcp
+claude mcp add godot -- node /path/to/godot-mcp/build/index.js
 ```
 
 That's it. Restart Claude Code and your Godot MCP tools are available.
@@ -98,7 +109,7 @@ That's it. Restart Claude Code and your Godot MCP tools are available.
 With environment variables:
 
 ```bash
-claude mcp add godot -e GODOT_PATH=/path/to/godot -e DEBUG=true -- npx @coding-solo/godot-mcp
+claude mcp add godot -e GODOT_PATH=/path/to/godot -e DEBUG=true -- node /path/to/godot-mcp/build/index.js
 ```
 
 <details>
@@ -110,8 +121,8 @@ Add to your Cline MCP settings file (`~/Library/Application Support/Code/User/gl
 {
   "mcpServers": {
     "godot": {
-      "command": "npx",
-      "args": ["@coding-solo/godot-mcp"],
+      "command": "node",
+      "args": ["/path/to/godot-mcp/build/index.js"],
       "env": {
         "DEBUG": "true"
       },
@@ -159,7 +170,7 @@ Add to your Cline MCP settings file (`~/Library/Application Support/Code/User/gl
 3. Fill out the form:
    - Name: `godot`
    - Type: `command`
-   - Command: `npx @coding-solo/godot-mcp`
+   - Command: `node /path/to/godot-mcp/build/index.js`
 4. Click "Add"
 5. You may need to press the refresh button in the top right corner of the MCP server card to populate the tool list
 
@@ -171,8 +182,8 @@ Create a file at `.cursor/mcp.json` in your project directory:
 {
   "mcpServers": {
     "godot": {
-      "command": "npx",
-      "args": ["@coding-solo/godot-mcp"],
+      "command": "node",
+      "args": ["/path/to/godot-mcp/build/index.js"],
       "env": {
         "DEBUG": "true"
       }
@@ -192,8 +203,8 @@ For any MCP-compatible client, use this configuration:
 {
   "mcpServers": {
     "godot": {
-      "command": "npx",
-      "args": ["@coding-solo/godot-mcp"],
+      "command": "node",
+      "args": ["/path/to/godot-mcp/build/index.js"],
       "env": {
         "GODOT_PATH": "/path/to/godot",
         "DEBUG": "true"
@@ -212,20 +223,7 @@ For any MCP-compatible client, use this configuration:
 | `GODOT_PATH` | Path to the Godot executable (overrides automatic detection) |
 | `DEBUG` | Set to `"true"` to enable detailed server-side debug logging |
 
-<details>
-<summary><strong>Building from Source</strong></summary>
-
-```bash
-git clone https://codeberg.org/desertmouse/godot-mcp.git
-cd godot-mcp
-npm install
-npm run build
-```
-
-Then point your MCP client to `build/index.js` instead of using `npx`.
-
-</details>
-
+After pulling new changes, re-run `npm run build` to rebuild `build/index.js`. For active development, `npm run watch` recompiles the TypeScript on save (run `npm run build` when the bundled GDScript or executable bit needs to be refreshed).
 
 ## Architecture
 
