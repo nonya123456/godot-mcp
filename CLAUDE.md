@@ -8,12 +8,16 @@ Godot MCP is a Model Context Protocol (MCP) server that lets AI agents drive the
 
 ## Commands
 
-- `npm run build` — compile TypeScript (`tsc`) then run `scripts/build.js`, which chmods `build/index.js` to `755` and copies `src/scripts/godot_operations.gd` into `build/scripts/`. **The `.gd` script is not compiled — it must be copied, so always rebuild after editing it.**
-- `npm run watch` — `tsc --watch` for incremental TypeScript compilation. Note this does NOT re-run `scripts/build.js`, so the `.gd` copy and chmod are skipped; run `npm run build` when the GDScript or executable bit matters.
-- `npm run inspector` — launch `@modelcontextprotocol/inspector` against `build/index.js` for interactive tool testing.
+This project runs on [Bun](https://bun.sh) — there is **no build step**. Bun executes `src/index.ts` directly, and the bundled `src/scripts/godot_operations.gd` is referenced in place (no copy needed).
+
+- `bun install` — install dependencies.
+- `bun run start` — run the MCP server (`bun run src/index.ts`).
+- `bun run dev` — run the server with auto-restart on file changes (`bun --watch`).
+- `bun run typecheck` — type-check with `tsc --noEmit` (Bun does not type-check at runtime, so run this to catch type errors).
+- `bun run inspector` — launch `@modelcontextprotocol/inspector` against `bun run src/index.ts` for interactive tool testing.
 - There is no test suite, linter, or formatter configured.
 
-Requires Node `>=18` and a Godot executable. Set `GODOT_PATH` to point at the Godot binary (otherwise it auto-detects common install locations per-platform); set `DEBUG=true` for verbose stderr logging.
+Requires Bun `>=1.0` and a Godot executable. Set `GODOT_PATH` to point at the Godot binary (otherwise it auto-detects common install locations per-platform); set `DEBUG=true` for verbose stderr logging.
 
 ## Architecture
 
@@ -44,7 +48,7 @@ For scene-mutating tools, reuse the existing scaffolding instead of re-implement
 - **TS side:** `validateSceneOperation(args)` checks the project + scene exist and the paths are safe; `runSceneOperation(...)` runs the op and formats the response. Add any new `snake_case` param to `parameterMappings` so both naming styles work.
 - **GDScript side:** shared helpers in `godot_operations.gd` — `load_scene_instance()`, `pack_and_save()`, `resolve_node()` (accepts `"root"`, the root's real name, or a relative path), and `coerce_value()` (turns JSON arrays/dicts into `Vector2`/`Color`/etc. by the target property's type).
 
-**Editor-parity invariant:** these operations must produce `.tscn`/`.tres` output identical to what the Godot editor writes by hand. When changing scene serialization, verify against a real Godot binary (e.g. `godot --headless --path <proj> --script build/scripts/godot_operations.gd <op> <json>`) and diff the result against an editor-saved reference. Notably: a scene root's owner stays `null` (never itself), the root is named after its type, structural moves must re-set child ownership to the scene root, and sub-scene instances must serialize as `instance=ExtResource(...)` rather than being flattened. (Per-node `unique_id` is normal Godot 4.x output, not a bug.)
+**Editor-parity invariant:** these operations must produce `.tscn`/`.tres` output identical to what the Godot editor writes by hand. When changing scene serialization, verify against a real Godot binary (e.g. `godot --headless --path <proj> --script src/scripts/godot_operations.gd <op> <json>`) and diff the result against an editor-saved reference. Notably: a scene root's owner stays `null` (never itself), the root is named after its type, structural moves must re-set child ownership to the scene root, and sub-scene instances must serialize as `instance=ExtResource(...)` rather than being flattened. (Per-node `unique_id` is normal Godot 4.x output, not a bug.)
 
 ## Security model (do not regress)
 

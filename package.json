@@ -21,27 +21,26 @@
   "author": "Solomon Elias <solomon@sippy.ai>",
   "type": "module",
   "bin": {
-    "godot-mcp": "./build/index.js"
+    "godot-mcp": "./src/index.ts"
   },
   "files": [
-    "build"
+    "src"
   ],
   "scripts": {
-    "build": "tsc && node scripts/build.js",
-    "inspector": "npx @modelcontextprotocol/inspector build/index.js",
-    "prepare": "npm run build",
-    "watch": "tsc --watch"
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "inspector": "bunx @modelcontextprotocol/inspector bun run src/index.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "0.6.0",
-    "axios": "^1.7.9",
-    "fs-extra": "^11.2.0"
+    "@modelcontextprotocol/sdk": "0.6.0"
   },
   "devDependencies": {
+    "@types/bun": "^1.1.0",
     "@types/node": "^20.11.24",
     "typescript": "^5.3.3"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "bun": ">=1.0.0"
   }
 }

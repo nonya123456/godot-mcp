@@ -2,7 +2,7 @@
 
 [![](https://badge.mcpx.dev?type=server 'MCP Server')](https://modelcontextprotocol.io/introduction)
 [![Made with Godot](https://img.shields.io/badge/Made%20with-Godot-478CBF?style=flat&logo=godot%20engine&logoColor=white)](https://godotengine.org)
-[![](https://img.shields.io/badge/Node.js-339933?style=flat&logo=nodedotjs&logoColor=white 'Node.js')](https://nodejs.org/en/download/)
+[![](https://img.shields.io/badge/Bun-000000?style=flat&logo=bun&logoColor=white 'Bun')](https://bun.sh)
 [![](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white 'TypeScript')](https://www.typescriptlang.org/)
 [![](https://img.shields.io/badge/License-MIT-red.svg 'MIT License')](https://opensource.org/licenses/MIT)
 
@@ -82,26 +82,25 @@ Godot MCP enables AI agents to launch the Godot editor, run projects, capture de
 ## Requirements
 
 - [Godot Engine](https://godotengine.org/download) installed on your system
-- Node.js (>=18.0.0) and npm
+- [Bun](https://bun.sh) (>=1.0)
 - An AI agent that supports MCP
 
 ## Quick Start
 
-This fork is not published to npm, so first build it from source:
+This server runs directly from TypeScript source with [Bun](https://bun.sh) — there is no build step. This fork is not published to npm, so clone it and install dependencies:
 
 ```bash
 git clone https://codeberg.org/desertmouse/godot-mcp.git
 cd godot-mcp
-npm install
-npm run build
+bun install
 ```
 
-This produces `build/index.js`. Use its absolute path when configuring your MCP client below. In the examples, replace `/path/to/godot-mcp` with the directory you cloned into.
+Then point your MCP client at `src/index.ts` with Bun. In the examples below, replace `/path/to/godot-mcp` with the directory you cloned into.
 
 ### Claude Code
 
 ```bash
-claude mcp add godot -- node /path/to/godot-mcp/build/index.js
+claude mcp add godot -- bun /path/to/godot-mcp/src/index.ts
 ```
 
 That's it. Restart Claude Code and your Godot MCP tools are available.
@@ -109,7 +108,7 @@ That's it. Restart Claude Code and your Godot MCP tools are available.
 With environment variables:
 
 ```bash
-claude mcp add godot -e GODOT_PATH=/path/to/godot -e DEBUG=true -- node /path/to/godot-mcp/build/index.js
+claude mcp add godot -e GODOT_PATH=/path/to/godot -e DEBUG=true -- bun /path/to/godot-mcp/src/index.ts
 ```
 
 <details>
@@ -121,8 +120,8 @@ Add to your Cline MCP settings file (`~/Library/Application Support/Code/User/gl
 {
   "mcpServers": {
     "godot": {
-      "command": "node",
-      "args": ["/path/to/godot-mcp/build/index.js"],
+      "command": "bun",
+      "args": ["/path/to/godot-mcp/src/index.ts"],
       "env": {
         "DEBUG": "true"
       },
@@ -170,7 +169,7 @@ Add to your Cline MCP settings file (`~/Library/Application Support/Code/User/gl
 3. Fill out the form:
    - Name: `godot`
    - Type: `command`
-   - Command: `node /path/to/godot-mcp/build/index.js`
+   - Command: `bun /path/to/godot-mcp/src/index.ts`
 4. Click "Add"
 5. You may need to press the refresh button in the top right corner of the MCP server card to populate the tool list
 
@@ -182,8 +181,8 @@ Create a file at `.cursor/mcp.json` in your project directory:
 {
   "mcpServers": {
     "godot": {
-      "command": "node",
-      "args": ["/path/to/godot-mcp/build/index.js"],
+      "command": "bun",
+      "args": ["/path/to/godot-mcp/src/index.ts"],
       "env": {
         "DEBUG": "true"
       }
@@ -203,8 +202,8 @@ For any MCP-compatible client, use this configuration:
 {
   "mcpServers": {
     "godot": {
-      "command": "node",
-      "args": ["/path/to/godot-mcp/build/index.js"],
+      "command": "bun",
+      "args": ["/path/to/godot-mcp/src/index.ts"],
       "env": {
         "GODOT_PATH": "/path/to/godot",
         "DEBUG": "true"
@@ -223,7 +222,7 @@ For any MCP-compatible client, use this configuration:
 | `GODOT_PATH` | Path to the Godot executable (overrides automatic detection) |
 | `DEBUG` | Set to `"true"` to enable detailed server-side debug logging |
 
-After pulling new changes, re-run `npm run build` to rebuild `build/index.js`. For active development, `npm run watch` recompiles the TypeScript on save (run `npm run build` when the bundled GDScript or executable bit needs to be refreshed).
+There is no build step — Bun runs the TypeScript directly, so changes take effect the next time the server starts. After pulling new changes, run `bun install` if dependencies changed. `bun run typecheck` type-checks with `tsc`; `bun run dev` runs the server with auto-restart on file changes.
 
 ## Architecture
 
@@ -239,7 +238,7 @@ The bundled script accepts operation type and parameters as JSON, allowing for f
 - **Godot Not Found**: Set the `GODOT_PATH` environment variable to your Godot executable path
 - **Connection Issues**: Ensure the server is running and restart your AI assistant
 - **Invalid Project Path**: Ensure the path points to a directory containing a `project.godot` file
-- **Build Issues**: Make sure all dependencies are installed by running `npm install`
+- **Dependency Issues**: Make sure all dependencies are installed by running `bun install`
 
 <details>
 <summary><strong>Cursor-Specific Issues</strong></summary>

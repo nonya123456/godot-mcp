@@ -38,24 +38,23 @@ By participating in this project, you agree to maintain a respectful and inclusi
 ### Setting Up the Development Environment
 
 1. Clone the repository
-2. Install dependencies with `npm install`
-3. Build the project with `npm run build`
-4. For development with auto-rebuild, use `npm run watch`
+2. Install dependencies with `bun install`
+3. Run the server with `bun run start` (Bun executes the TypeScript directly — there is no build step)
+4. For development with auto-restart, use `bun run dev`; type-check with `bun run typecheck`
 
 ### Project Structure
 
 ```
 godot-mcp/
-├── src/             # Source code
-│   └── index.ts     # Main server implementation
-├── build/           # Compiled JavaScript (generated)
-├── tests/           # Test files (future)
-├── examples/        # Example Godot projects (future)
-├── LICENSE          # MIT License
-├── README.md        # Documentation
-├── CONTRIBUTING.md  # Contribution guidelines
-├── package.json     # Project configuration
-└── tsconfig.json    # TypeScript configuration
+├── src/                       # Source code
+│   ├── index.ts               # Main server implementation
+│   └── scripts/
+│       └── godot_operations.gd # Bundled GDScript for scene operations
+├── LICENSE                    # MIT License
+├── README.md                  # Documentation
+├── CONTRIBUTING.md            # Contribution guidelines
+├── package.json               # Project configuration
+└── tsconfig.json              # TypeScript configuration (type-check only)
 ```
 
 ### Code Style
@@ -74,7 +73,7 @@ For debugging the MCP server:
 1. Set the `DEBUG` environment variable to `true`
 2. Use the MCP Inspector for interactive debugging:
    ```bash
-   npm run inspector
+   bun run inspector
    ```
 3. Check the logs for detailed information about what's happening
 
