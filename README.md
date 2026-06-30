@@ -64,10 +64,17 @@ Godot MCP enables AI agents to launch the Godot editor, run projects, capture de
 - **Project Analysis**: Get detailed information about project structure
 - **Scene Management**:
   - Create new scenes with specified root node types
+  - Inspect a scene's node hierarchy (`get_scene_tree`)
   - Add nodes to existing scenes with customizable properties
+  - Edit existing nodes: set properties, rename, delete, and reparent
+  - Instance other scenes as child nodes (`add_scene_instance`)
   - Load sprites and textures into Sprite2D nodes
   - Export 3D scenes as MeshLibrary resources for GridMap
   - Save scenes with options for creating variants
+- **Scripting & Wiring**:
+  - Create GDScript files and attach them to nodes
+  - Connect signals between nodes
+  - Add nodes to groups
 - **UID Management** (for Godot 4.4+):
   - Get UID for specific files
   - Update UID references by resaving resources
@@ -122,6 +129,16 @@ Add to your Cline MCP settings file (`~/Library/Application Support/Code/User/gl
         "load_sprite",
         "export_mesh_library",
         "save_scene",
+        "get_scene_tree",
+        "update_node_property",
+        "delete_node",
+        "rename_node",
+        "reparent_node",
+        "add_scene_instance",
+        "create_script",
+        "attach_script",
+        "connect_signal",
+        "add_to_group",
         "get_uid",
         "update_project_uids"
       ]

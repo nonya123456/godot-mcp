@@ -25,7 +25,7 @@ The codebase is two files doing two halves of the work:
 ### Two execution paths
 
 1. **Direct CLI commands** for simple operations. `launch_editor` and `run_project` use `spawn()` with Godot flags (`-e` for editor, `-d` for debug run). `get_godot_version`, `get_project_info`, `get_uid`, `update_project_uids` use `--version`. `run_project` keeps a single `activeProcess` handle whose stdout/stderr are buffered into arrays; `get_debug_output` reads those buffers and `stop_project` kills the process.
-2. **Bundled GDScript operations** for `create_scene`, `add_node`, `load_sprite`, `export_mesh_library`, `save_scene`, `get_uid`, and `update_project_uids` (which maps to the `resave_resources` GDScript op). These go through `executeOperation(operation, params, projectPath)`, which invokes Godot as:
+2. **Bundled GDScript operations** for scene authoring — `create_scene`, `add_node`, `load_sprite`, `export_mesh_library`, `save_scene`, `get_scene_tree`, `update_node_property`, `delete_node`, `rename_node`, `reparent_node`, `add_scene_instance`, `create_script`, `attach_script`, `connect_signal`, `add_to_group`, `get_uid`, and `update_project_uids` (which maps to the `resave_resources` GDScript op). These go through `executeOperation(operation, params, projectPath)`, which invokes Godot as:
    `godot --headless --path <projectPath> --script <godot_operations.gd> <operation> <jsonParams> [--debug-godot]`
    The operation name and a JSON params blob are passed as positional CLI args; the `.gd` script parses them back out by index relative to `--script`.
 
@@ -39,6 +39,12 @@ Three places must stay in sync:
 1. Add the tool definition (name + `inputSchema`) to the `tools` array in `setupToolHandlers()`.
 2. Add a `case` in the `CallToolRequestSchema` handler's `switch` routing to a new `handle*` method.
 3. If it needs a complex Godot operation, add a `match` arm and `func` in `godot_operations.gd` and call it via `executeOperation`.
+
+For scene-mutating tools, reuse the existing scaffolding instead of re-implementing it:
+- **TS side:** `validateSceneOperation(args)` checks the project + scene exist and the paths are safe; `runSceneOperation(...)` runs the op and formats the response. Add any new `snake_case` param to `parameterMappings` so both naming styles work.
+- **GDScript side:** shared helpers in `godot_operations.gd` — `load_scene_instance()`, `pack_and_save()`, `resolve_node()` (accepts `"root"`, the root's real name, or a relative path), and `coerce_value()` (turns JSON arrays/dicts into `Vector2`/`Color`/etc. by the target property's type).
+
+**Editor-parity invariant:** these operations must produce `.tscn`/`.tres` output identical to what the Godot editor writes by hand. When changing scene serialization, verify against a real Godot binary (e.g. `godot --headless --path <proj> --script build/scripts/godot_operations.gd <op> <json>`) and diff the result against an editor-saved reference. Notably: a scene root's owner stays `null` (never itself), the root is named after its type, structural moves must re-set child ownership to the scene root, and sub-scene instances must serialize as `instance=ExtResource(...)` rather than being flattened. (Per-node `unique_id` is normal Godot 4.x output, not a bug.)
 
 ## Security model (do not regress)
 
